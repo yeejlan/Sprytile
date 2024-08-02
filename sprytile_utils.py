@@ -301,8 +301,8 @@ def get_material_texture(mat):
     :return: Texture or None
     """
     texture_img = get_material_texture_node(mat)
-
     if texture_img:
+        # print(texture_img.image)
         return texture_img.image
     else:
         return None
@@ -316,7 +316,6 @@ def set_material_texture(mat, texture):
     :return: True if successful
     """
     texture_img = get_material_texture_node(mat)
-
     if texture_img:
         texture_img.image = texture
         return True
@@ -344,7 +343,6 @@ def get_grid_texture(obj, sprytile_grid):
     :return: Texture or None
     """
     material = get_grid_material(sprytile_grid)
-
     if material is None:
         return None
     
@@ -657,11 +655,6 @@ class UTIL_OP_SprytileGridAdd(bpy.types.Operator):
         new_grid.mat_id = target_mat.mat_id
         new_grid.id = get_highest_grid_id(context) + 1
 
-        addon_prefs = bpy.context.preferences.addons[__package__].preferences
-        if addon_prefs:
-            new_grid.grid = addon_prefs.default_grid
-            new_grid.auto_pad_offset = addon_prefs.default_pad_offset
-
         if grid_idx > -1:
             new_grid.grid = target_mat.grids[grid_idx].grid
             target_mat.grids.move(new_idx, grid_idx + 1)
@@ -969,13 +962,6 @@ class UTIL_OP_SprytileLoadTileset(bpy.types.Operator, ImportHelper):
         bpy.ops.sprytile.validate_grids('INVOKE_DEFAULT')
         bpy.data.textures.update()
 
-        addon_prefs = context.preferences.addons[__package__].preferences
-        if addon_prefs:
-            if addon_prefs.auto_pixel_viewport:
-                bpy.ops.sprytile.viewport_setup('INVOKE_DEFAULT')
-            if addon_prefs.auto_grid_setup:
-                bpy.ops.sprytile.setup_grid('INVOKE_DEFAULT')
-
 
 class UTIL_OP_SprytileNewTileset(bpy.types.Operator, ImportHelper):
     bl_idname = "sprytile.tileset_new"
@@ -1117,9 +1103,6 @@ class UTIL_OP_SprytileValidateGridList(bpy.types.Operator):
             if mat_idx < 0:
                 remove_idx.append(idx)
                 continue
-            if (mat.mat_id == "Dots Stroke"):
-                remove_idx.append(idx)
-                continue
             if mat_list[mat_idx].users == 0:
                 remove_idx.append(idx)
             for grid in mat.grids:
@@ -1138,17 +1121,12 @@ class UTIL_OP_SprytileValidateGridList(bpy.types.Operator):
                 if mat_data.mat_id == mat.name:
                     is_mat_valid = True
                     break
-            if is_mat_valid is False and mat.name != "Dots Stroke":
+            if is_mat_valid is False:
                 mat_data_entry = mat_data_list.add()
                 mat_data_entry.mat_id = mat.name
                 mat_grid = mat_data_entry.grids.add()
                 mat_grid.mat_id = mat.name
                 mat_grid.id = get_highest_grid_id(context) + 1
-
-                addon_prefs = bpy.context.preferences.addons[__package__].preferences
-                if addon_prefs:
-                    mat_grid.grid = addon_prefs.default_grid
-                    mat_grid.auto_pad_offset = addon_prefs.default_pad_offset
 
         context.object.sprytile_gridid = get_highest_grid_id(context)
         bpy.ops.sprytile.build_grid_list()
@@ -1335,7 +1313,7 @@ class UTIL_OP_SprytileMakeDoubleSided(bpy.types.Operator):
 
         mesh.faces.index_update()
         mesh.faces.ensure_lookup_table()
-        bmesh.update_edit_mesh(context.object.data, True, True)
+        bmesh.update_edit_mesh(context.object.data)
         return {'FINISHED'}
 
 
@@ -1344,25 +1322,16 @@ class UTIL_OP_SprytileSetupGrid(bpy.types.Operator):
     bl_label = "Floor Grid To Pixels"
     bl_description = "Make floor grid display follow world pixel settings"
 
-    @classmethod
-    def description(cls, context, properties):
-        return "Set grid scale to {} pixels".format(context.scene.sprytile_data.world_pixels)
-
     def execute(self, context):
         return self.invoke(context, None)
 
     def invoke(self, context, event):
         pixel_unit = (1 / context.scene.sprytile_data.world_pixels)
-        for window in context.window_manager.windows:
-            for area in window.screen.areas:
-                if (area.type == 'VIEW_3D'):
-                    for space in area.spaces:
-                        if (space.type == 'VIEW_3D'):
-                            space.overlay.grid_scale = pixel_unit
-                            space.overlay.grid_subdivisions = 1
-        
+        space_data = context.space_data
+        space_data.grid_scale = pixel_unit
+        space_data.grid_subdivisions = 1
         context.scene.tool_settings.use_snap = True
-        context.scene.tool_settings.snap_elements = {'INCREMENT'}
+        context.scene.tool_settings.snap_element = 'INCREMENT'
         return {'FINISHED'}
 
 
@@ -1388,6 +1357,8 @@ class UTIL_OP_SprytileGridTranslate(bpy.types.Operator):
         font_id = 0
         font_size = 16
         blf.size(font_id, font_size, 72)
+
+        bgl.glColor4f(1, 1, 1, 1)
 
         readout_axis = ['X', 'Y', 'Z']
         for i in range(3):
@@ -1461,22 +1432,22 @@ class UTIL_OP_SprytileGridTranslate(bpy.types.Operator):
         space_data = context.space_data
         if space_data.type == 'VIEW_3D':
             self.restore_settings = {
-                "grid_scale": space_data.overlay.grid_scale,
-                "grid_sub": space_data.overlay.grid_subdivisions,
-                "show_floor": space_data.overlay.show_floor,
-                "pivot": context.scene.tool_settings.transform_pivot_point,
-                "orient": context.scene.transform_orientation_slots[0].type,
+                "grid_scale": space_data.grid_scale,
+                "grid_sub": space_data.grid_subdivisions,
+                "show_floor": space_data.show_floor,
+                "pivot": context.space_data.pivot_point,
+                "orient": context.space_data.transform_orientation,
                 "use_snap": context.scene.tool_settings.use_snap,
-                "snap_elements": context.scene.tool_settings.snap_elements
+                "snap_element": context.scene.tool_settings.snap_element
             }
             pixel_unit = 1 / context.scene.sprytile_data.world_pixels
-            space_data.overlay.grid_scale = pixel_unit
-            space_data.overlay.grid_subdivisions = 1
-            space_data.overlay.show_floor = False
-            context.scene.transform_orientation_slots[0].type = 'GLOBAL'
-            context.scene.tool_settings.transform_pivot_point = 'CURSOR'
+            space_data.grid_scale = pixel_unit
+            space_data.grid_subdivisions = 1
+            space_data.show_floor = False
+            space_data.pivot_point = 'CURSOR'
+            space_data.transform_orientation = 'GLOBAL'
             context.scene.tool_settings.use_snap = True
-            context.scene.tool_settings.snap_elements = {'INCREMENT'}
+            context.scene.tool_settings.snap_element = 'INCREMENT'
         # Remember what the current active operator is, when it changes
         # we know that the translate operator is complete
         self.watch_operator = context.active_operator
@@ -1510,13 +1481,13 @@ class UTIL_OP_SprytileGridTranslate(bpy.types.Operator):
         pixel_unit = 1 / context.scene.sprytile_data.world_pixels
         # Restore grid settings if changed
         if self.restore_settings is not None:
-            context.space_data.overlay.grid_scale = self.restore_settings['grid_scale']
-            context.space_data.overlay.grid_subdivisions = self.restore_settings['grid_sub']
-            context.space_data.overlay.show_floor = self.restore_settings['show_floor']
-            context.scene.tool_settings.transform_pivot_point = self.restore_settings['pivot']
-            context.scene.transform_orientation_slots[0].type = self.restore_settings['orient']
+            context.space_data.grid_scale = self.restore_settings['grid_scale']
+            context.space_data.grid_subdivisions = self.restore_settings['grid_sub']
+            context.space_data.show_floor = self.restore_settings['show_floor']
+            context.space_data.pivot_point = self.restore_settings['pivot']
+            context.space_data.transform_orientation = self.restore_settings['orient']
             context.scene.tool_settings.use_snap = self.restore_settings['use_snap']
-            context.scene.tool_settings.snap_elements = self.restore_settings['snap_elements']
+            context.scene.tool_settings.snap_element = self.restore_settings['snap_element']
         # Didn't snap to grid, force to grid by calculating what the snapped translate would be
         else:
             op = context.active_operator
@@ -1604,22 +1575,11 @@ class UTIL_OP_SprytileSnapCursor(bpy.types.Operator):
 
         up_vector, right_vector, plane_normal = get_current_grid_vectors(scene)
 
-        if event.ctrl and event.value == 'PRESS':
-            if scene.sprytile_data.cursor_snap == 'GRID':
-               scene.sprytile_data.cursor_snap = 'VERTEX'
-            else:
-               scene.sprytile_data.cursor_snap = 'GRID'
-            return
-        
-        if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
-            move_step = -1 if event.type == 'WHEELUPMOUSE' else 1
-            
-            target_grid = get_grid(context, context.object.sprytile_gridid)
-            pixel_move = 1 if event.shift else math.floor(target_grid.grid[1] / 2)
-            
-            step_vec = scene.sprytile_data.paint_normal_vector * (pixel_move / scene.sprytile_data.world_pixels) * move_step
-            scene.cursor.location = scene.cursor.location + step_vec
-            return
+        #if event.shift and event.value == 'PRESS':
+        #    if scene.sprytile_data.cursor_snap == 'GRID':
+        #        scene.sprytile_data.cursor_snap = 'VERTEX'
+        #    else:
+        #        scene.sprytile_data.cursor_snap = 'GRID'
 
         # Snap cursor, depending on setting
         if scene.sprytile_data.cursor_snap == 'GRID':
@@ -1640,12 +1600,19 @@ class UTIL_OP_SprytileSnapCursor(bpy.types.Operator):
 
         elif scene.sprytile_data.cursor_snap == 'VERTEX':
             # Get if user is holding down tile picker modifier
-            check_modifier = event.alt
+            #check_modifier = False
+            #addon_prefs = context.preferences.addons[__package__].preferences
+            #if addon_prefs.tile_picker_key == 'Alt':
+            #    check_modifier = event.alt
+            #if addon_prefs.tile_picker_key == 'Ctrl':
+            #    check_modifier = event.ctrl
+            #if addon_prefs.tile_picker_key == 'Shift':
+            #    check_modifier = event.shift
 
             location, normal, face_index, distance = sprytile_modal.VIEW3D_OP_SprytileModalTool.raycast_object(context.object, ray_origin, ray_vector)
             if location is None:
-                if check_modifier:
-                   scene.sprytile_data.lock_normal = False
+                #if check_modifier:
+                #    scene.sprytile_data.lock_normal = False
                 return
             # Location in world space, convert to object space
             matrix = context.object.matrix_world.copy()
@@ -1674,15 +1641,15 @@ class UTIL_OP_SprytileSnapCursor(bpy.types.Operator):
                 scene.cursor.location = matrix @ face.verts[closest_vtx].co
 
             # If find face tile button pressed, set work plane normal too
-            if check_modifier:
-               sprytile_data = context.scene.sprytile_data
-               # Check if mouse is hitting object
-               target_normal = context.object.matrix_world.to_quaternion() @ normal
-               face_up_vector, face_right_vector = sprytile_modal.VIEW3D_OP_SprytileModalTool.get_face_up_vector(context.object, context, face_index, 0.4)
-               if face_up_vector is not None:
-                   sprytile_data.paint_normal_vector = target_normal
-                   sprytile_data.paint_up_vector = face_up_vector
-                   sprytile_data.lock_normal = True
+            #if check_modifier:
+            #    sprytile_data = context.scene.sprytile_data
+            #    # Check if mouse is hitting object
+            #    target_normal = context.object.matrix_world.to_quaternion() @ normal
+            #    face_up_vector, face_right_vector = self.get_face_up_vector(context, face_index, 0.4)
+            #    if face_up_vector is not None:
+            #        sprytile_data.paint_normal_vector = target_normal
+            #        sprytile_data.paint_up_vector = face_up_vector
+            #        sprytile_data.lock_normal = True
 
 
 class UTIL_OP_SprytileTilePicker(bpy.types.Operator):
@@ -1876,12 +1843,9 @@ class VIEW3D_MT_SprytileObjectDropDown(bpy.types.Menu):
         layout = self.layout
         layout.operator("sprytile.reset_sprytile")
         layout.separator()
-        layout.operator("sprytile.setup_grid")
-        layout.separator()
+        layout.operator("sprytile.material_setup")
         layout.operator("sprytile.texture_setup")
         layout.operator("sprytile.viewport_setup")
-        layout.separator()
-        layout.operator("sprytile.material_setup")
         layout.operator("sprytile.add_new_material")
         layout.separator()
         layout.operator("sprytile.props_teardown")
@@ -1922,7 +1886,6 @@ class VIEW3D_PT_SprytileObjectPanel(bpy.types.Panel):
         elif context.object.type != 'MESH':
             selection_enabled = False
 
-        layout.prop(context.scene.sprytile_data, "world_pixels")
         box = layout.box()
         box.label(text="Material Setup")
         if selection_enabled:
@@ -1961,11 +1924,8 @@ class VIEW3D_MT_SprytileWorkDropDown(bpy.types.Menu):
         layout.separator()
         layout.operator("sprytile.setup_grid")
         layout.separator()
-        layout.operator("sprytile.texture_setup")
-        layout.operator("sprytile.viewport_setup")
-        layout.separator()
         layout.operator("sprytile.material_setup")
-        layout.operator("sprytile.add_new_material")
+        layout.operator("sprytile.texture_setup")
         layout.separator()
         layout.operator("sprytile.make_double_sided")
         layout.separator()
@@ -2045,22 +2005,25 @@ class VIEW3D_PT_SprytileWorkflowPanel(bpy.types.Panel):
             layout.prop(data, "axis_plane_color")
             layout.prop(data, "axis_plane_size")
 
-        row = layout.row(align=True)
-        if bpy.app.version >= (2, 90, 0):
-            row.prop(context.scene.tool_settings, "use_transform_correct_face_attributes", toggle=True, text="", icon="UV")
-            row.separator()
-        row.prop(data, "cursor_flow", toggle=True, text="", icon="PIVOT_CURSOR")
-        #row.label(text="", icon="SNAP_ON")
+        row = layout.row(align=False)
+        row.label(text="", icon="SNAP_ON")
         row.prop(data, "cursor_snap", expand=True)
 
-        layout.prop(data, "world_pixels", text="World Pixels")
-        
+        row = layout.row(align=False)
+        # https://docs.blender.org/api/blender2.8/bpy.types.UILayout.html#bpy.types.UILayout.label
+        row.label(text="", icon="PIVOT_CURSOR")
+        row.prop(data, "cursor_flow", toggle=True)
+
+        # layout.prop(data, "snap_translate", toggle=True)
+
+        layout.prop(data, "world_pixels")
         layout.menu("VIEW3D_MT_SprytileWorkDropDown")
 
         split = layout.split(factor=0.3, align=True)
         split.prop(data, "auto_reload", toggle=True)
         split.operator("sprytile.reload_imgs")
-        
+
+
 # module classes
 classes = (
     UTIL_OP_SprytileAxisUpdate,

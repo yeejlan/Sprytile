@@ -7,6 +7,10 @@
   <br>
 </p>
 
+### Notice
+
+I created this fork to make this plugin work with Blender 4.2. Please note that I have only tested it on Blender 4.2.
+
 ### Features
 
 * Tile building: Build your mesh directly with tiles, skip tedious UV mapping while quickly rotating and flipping tiles.

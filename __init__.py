@@ -2,7 +2,7 @@ bl_info = {
     "name": "Sprytile Painter",
     "author": "Jeiel Aranal",
     # Final version number must be two numerals to support x.x.00
-    "version": (0, 5, 20),
+    "version": (0, 4, 50),
     "blender": (2, 80, 0),
     "description": "A utility for creating tile based low spec scenes with paint/map editor tools",
     "location": "View3D > UI panel > Sprytile",
@@ -37,7 +37,6 @@ else:
 
 import bpy
 import bpy.utils.previews
-from bpy.app.handlers import persistent
 #from . import addon_updater_ops
 from bpy.utils.toolsystem import ToolDef
 from bpy.props import *
@@ -390,12 +389,6 @@ class SprytileSceneSettings(bpy.types.PropertyGroup):
         default=False
     )
 
-    allow_backface: bpy.props.BoolProperty(
-        name="Backface",
-        description="Should Sprytile work on backfaces",
-        default=False,
-    )
-
     def set_reload(self, value):
         self["auto_reload"] = value
         if value is True:
@@ -550,7 +543,7 @@ class SprytileMaterialGridSettings(bpy.types.PropertyGroup):
     )
     auto_pad_offset : FloatProperty(
         name="Pad Offset",
-        description="Subpixel padding amount around edges of tiles",
+        description="Subpixel padding amount",
         default=0.05,
         min=0.05,
         max=0.20
@@ -732,44 +725,8 @@ class SprytileAddonPreferences(bpy.types.AddonPreferences):
     )
 
     auto_adjust_viewport_shading: bpy.props.BoolProperty(
-        name="Automatically switch viewport to Material Preview mode",
-        description="If enabled, viewport shading mode will change to Material Preview while using Sprytile tools",
-        default=True,
-    )
-
-    auto_pixel_viewport: bpy.props.BoolProperty(
-        name="Automatically setup pixel viewport",
-        description="If enabled, loading a tileset will automatically setup the pixel viewport.\nDisable if you're not going for a flatshaded look",
-        default=False,
-    )
-
-    default_pixel_density: bpy.props.IntProperty(
-        name="Pixel Density",
-        description="How many pixels are displayed in one world unit",
-        default=32,
-        min=8
-    )
-
-    default_grid: bpy.props.IntVectorProperty(
-        name="Grid Size",
-        description="Tileset grid size, in pixels",
-        min=1,
-        size=2,
-        subtype='XYZ',
-        default=(32, 32)
-    )
-
-    default_pad_offset: bpy.props.FloatProperty(
-        name="Subpixel Padding",
-        description="Default subpixel edge padding for tilesets",
-        default=0.05,
-        min=0.05,
-        max=0.20
-    )
-
-    auto_grid_setup: bpy.props.BoolProperty(
-        name="Automatically setup grid",
-        description="If enabled, loading a tileset will set the grid size to the chosen pixel density.",
+        name="Automatically switch viewport to Look Dev mode",
+        description="If enabled, viewport shading mode will change to Look Dev while using Sprytile tools",
         default=True,
     )
 
@@ -862,42 +819,7 @@ class SprytileAddonPreferences(bpy.types.AddonPreferences):
         layout = self.layout
 
         layout.prop(self, "preview_transparency")
-
-        box = layout.box()
-
-        box.label(text="Global Options")
-
-        row = box.row()
-
-        size_left_col = 0.3
-        
-        split = row.split(factor=size_left_col)
-        col = split.column()
-        col.label(text="Default Settings:")
-
-        col = split.column(align=True)
-        col.prop(self, "default_pixel_density")
-        col.row().prop(self, "default_grid")
-        col.prop(self, "default_pad_offset")
-
-        row = box.row()
-        split = row.split(factor=size_left_col)
-
-        col = split.column()
-        col.label(text="On Load Tileset:")
-        
-        col = split.column()
-        col.prop(self, "auto_grid_setup")
-        col.prop(self, "auto_pixel_viewport")
-        
-        row = box.row()
-        split = row.split(factor=size_left_col)
-
-        col = split.column()
-        col.label(text="On Sprytile Edit:")
-
-        col = split.column()
-        col.prop(self, "auto_adjust_viewport_shading")
+        layout.prop(self, "auto_adjust_viewport_shading")
 
         #box = layout.box()
         #box.label(text = "Keyboard Shortcuts")
@@ -1004,12 +926,12 @@ def generate_tool_keymap(keyconfig, paint_mode):
     km_items = keymap.keymap_items
     km_items.new("sprytile.modal_tool", 'LEFTMOUSE', 'PRESS')
     km_items.new("sprytile.tile_picker", 'LEFT_ALT', 'PRESS')
-    km_items.new("sprytile.rotate_left", 'Q', 'PRESS')
-    km_items.new("sprytile.rotate_right", 'E', 'PRESS')
-    km_items.new("sprytile.flip_x_toggle", 'Q', 'PRESS').shift = True
-    km_items.new("sprytile.flip_y_toggle", 'E', 'PRESS').shift = True
+    km_items.new("sprytile.rotate_right", 'FOUR', 'PRESS')
+    km_items.new("sprytile.rotate_left", 'FIVE', 'PRESS')
+    km_items.new("sprytile.flip_x_toggle", 'SIX', 'PRESS')
+    km_items.new("sprytile.flip_y_toggle", 'SEVEN', 'PRESS')
 
-    if paint_mode in {'MAKE_FACE', 'FILL'}:
+    if paint_mode == 'MAKE_FACE':
         km_items.new("sprytile.snap_cursor", 'S', 'PRESS')
         km_items.new("sprytile.set_normal", 'N', 'PRESS')
 
@@ -1067,20 +989,6 @@ submodules = (
     tool_fill,
 )
 
-@persistent
-def sprytile_load_handler(dummy):
-    sprytile_data = bpy.context.scene.sprytile_data
-    
-    # Turn on auto reload
-    if sprytile_data.auto_reload:
-        bpy.ops.sprytile.reload_auto('INVOKE_REGION_WIN')
-
-    # Reasonable assumption that a file that does not have a path
-    # is new, so setup the pixel density according to preferences
-    if not bpy.data.filepath:
-        addon_prefs = bpy.context.preferences.addons[__package__].preferences
-        if addon_prefs:
-            sprytile_data.world_pixels = addon_prefs.default_pixel_density
 
 def register():
     #addon_updater_ops.register(bl_info)
@@ -1094,8 +1002,6 @@ def register():
     PROP_OP_SprytilePropsSetup.props_setup()
     register_tools()
     setup_keymap()
-
-    bpy.app.handlers.load_post.append(sprytile_load_handler)
 
 
 def unregister():
