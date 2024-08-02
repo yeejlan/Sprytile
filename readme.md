@@ -2,7 +2,7 @@
     <img src="sprytile-logo.png?raw=true" height="100px"/>
     <h1 align="center">Sprytile Painter</h1>
     <h4 align="center">
-        A <img src="https://download.blender.org/institute/logos/blender-socket.png" height="20px"/> addon for creating tile based low spec 3D scenes. (Unofficial port for blender 2.8)
+        A <img src="https://download.blender.org/institute/logos/blender-socket.png" height="20px"/> addon for creating tile based low spec 3D scenes. (Unofficial port for blender 4.2)
     </h4>
   <br>
 </p>
